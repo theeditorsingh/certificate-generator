@@ -13,7 +13,6 @@ function MainComponent() {
     certificateType: "Certificate of Appreciation",
   });
 
-  // const [qrCode, setQrCode] = React.useState("");
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = React.useState(false);
@@ -33,24 +32,24 @@ function MainComponent() {
     }
   }, []);
 
-  // React.useEffect(() => {
-  //   const generateQR = async () => {
-  //     try {
-  //       const response = await fetch(
-  //         `/integrations/qr-code/generatebasicbase64?data=${encodeURIComponent(
-  //           "https://www.instagram.com/thehimadrifoundation/"
-  //         )}&size=100`
-  //       );
-  //       if (response.ok) {
-  //         const qrData = await response.text();
-  //         setQrCode(`data:image/png;base64,${qrData}`);
-  //       }
-  //     } catch (error) {
-  //       console.error("Error generating QR code:", error);
-  //     }
-  //   };
-  //   generateQR();
-  // }, []);
+  React.useEffect(() => {
+    const generateQR = async () => {
+      try {
+        const response = await fetch(
+          `/integrations/qr-code/generatebasicbase64?data=${encodeURIComponent(
+            "https://www.instagram.com/thehimadrifoundation/"
+          )}&size=100`
+        );
+        if (response.ok) {
+          const qrData = await response.text();
+          setQrCode(`data:image/png;base64,${qrData}`);
+        }
+      } catch (error) {
+        console.error("Error generating QR code:", error);
+      }
+    };
+    generateQR();
+  }, []);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -82,64 +81,191 @@ function MainComponent() {
     setIsGenerating(true);
 
     try {
-      // Check if html2canvas is available
+      // Load html2canvas if not available
       if (typeof html2canvas === "undefined") {
-        // Try to load html2canvas if not available
+        const script = document.createElement("script");
+        script.src =
+          "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
         await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src =
-            "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
           script.onload = resolve;
           script.onerror = reject;
           document.head.appendChild(script);
         });
+        // Wait for script to be ready
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      const certificateElement = document.getElementById("certificate");
-      if (!certificateElement) {
-        throw new Error("Certificate element not found");
-      }
+      // Load background and logo images - code by HS
+      const loadImage = (src) => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = src;
+        });
+      };
 
-      // Wait longer for images to load and ensure they're visible
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Ensure all images are loaded
-      const images = certificateElement.querySelectorAll("img");
-      await Promise.all(
-        Array.from(images).map((img) => {
-          if (img.complete) return Promise.resolve();
-          return new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = resolve; // Continue even if image fails
-            setTimeout(resolve, 3000); // Timeout after 3 seconds
-          });
-        })
-      );
+      const [backgroundImg, logoImg] = await Promise.all([
+        loadImage("/images/certificate.png"), // assuming your background image is named background.png
+        loadImage("/images/thf_logo.png"),
+      ]);
       
+      // Create canvas for high-quality rendering
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = 1200;
+      canvas.height = 900;
 
-      const canvas = await html2canvas(certificateElement, {
-        scale: 4,
-        useCORS: true,
-        allowTaint: false,
-        // backgroundColor: "#ffffff",
-        logging: false,
-        width: certificateElement.offsetWidth,
-        height: certificateElement.offsetHeight,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: certificateElement.offsetWidth,
-        windowHeight: certificateElement.offsetHeight,
-        foreignObjectRendering: true,
-        onclone: (clonedDoc) => {
-          // Ensure all images are visible in the cloned document
-          const clonedImages = clonedDoc.querySelectorAll("img");
-          clonedImages.forEach((img) => {
-            img.style.display = "block";
-            img.style.visibility = "visible";
-            img.style.opacity = "1";
-          });
-        },
-      });
+      // Enable high-quality text rendering
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.textRenderingOptimization = "optimizeQuality";
+
+      // Draw background image at full quality
+      ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+
+      // Set up text styling
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#1f2937";
+
+      // Certificate ID (top right with proper padding)
+      ctx.font = "14px Arial";
+      ctx.textAlign = "right";
+      ctx.fillText(
+        `Certificate ID: ${formData.certificateId}`,
+        canvas.width - 85,
+        90
+      );
+
+      // Logo (center top)
+      const logoSize = 80;
+      ctx.drawImage(logoImg, (canvas.width - logoSize) / 2, 120, logoSize, logoSize );
+
+      // Foundation name
+      ctx.font = "bold 32px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("The Himadri Foundation", canvas.width / 2, 240);
+
+      // Certificate type
+      ctx.font = "bold 42px Arial";
+      ctx.fillStyle = "#1e40af";
+      ctx.fillText(formData.certificateType, canvas.width / 2, 320);
+
+      // Blue line under certificate type
+      ctx.fillStyle = "#2563eb";
+      ctx.fillRect((canvas.width - 120) / 2, 335, 120, 3);
+
+      // "This certificate is proudly presented to"
+      ctx.font = "bold 20px Arial";
+      ctx.fillStyle = "#374151";
+      ctx.fillText(
+        "This certificate is proudly presented to",
+        canvas.width / 2,
+        400
+      );
+
+      // Recipient name
+      ctx.font = "bold 48px Arial";
+      ctx.fillStyle = "#1e40af";
+      ctx.fillText(formData.fullName, canvas.width / 2, 460);
+
+      // Recognition text
+      ctx.font = "bold 20px Arial";
+      ctx.fillStyle = "#374151";
+      ctx.textAlign = "center";
+
+      const recognitionText = `In recognition of your valuable ${
+        contributionTypes[formData.contributionType]
+      } to The Himadri Foundation`;
+      const eventText = formData.eventName
+        ? ` during ${formData.eventName}`
+        : "";
+      const fullRecognitionText = recognitionText + eventText + ".";
+
+      // Wrap text if too long
+      const maxWidth = 800;
+      const words = fullRecognitionText.split(" ");
+      let line = "";
+      let y = 520;
+
+      for (let i = 0; i < words.length; i++) {
+        const testLine = line + words[i] + " ";
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+
+        if (testWidth > maxWidth && i > 0) {
+          ctx.fillText(line, canvas.width / 2, y);
+          line = words[i] + " ";
+          y += 30;
+        } else {
+          line = testLine;
+        }
+      }
+      ctx.fillText(line, canvas.width / 2, y);
+
+      // Mission text
+      y += 50;
+      ctx.fillText(
+        "Your involvement has contributed to our mission of",
+        canvas.width / 2,
+        y
+      );
+      y += 30;
+      ctx.fillText(
+        "empowering mountain communities and promoting sustainable development.",
+        canvas.width / 2,
+        y
+      );
+
+      // Gratitude text
+      y += 50;
+      ctx.font = "bold 20px Arial";
+      ctx.fillStyle = "#1f2937";
+      ctx.fillText(
+        "We express our heartfelt gratitude and look forward to future collaborations.",
+        canvas.width / 2,
+        y
+      );
+
+      // Date (bottom left)
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#4b5563";
+      ctx.textAlign = "left";
+      ctx.fillText("Date:", 80, canvas.height - 120);
+
+      ctx.font = "bold 20px Arial";
+      ctx.fillStyle = "#1f2937";
+      const formattedDate = new Date(formData.date).toLocaleDateString(
+        "en-US",
+        {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }
+      );
+      ctx.fillText(formattedDate, 80, canvas.height - 90);
+
+      // Presenter info (bottom right)
+      ctx.textAlign = "right";
+      ctx.font = "bold 20px Arial";
+      ctx.fillStyle = "#1f2937";
+      ctx.fillText(
+        formData.presentedBy,
+        canvas.width - 80,
+        canvas.height - 120
+      );
+
+      // Signature line
+      ctx.strokeStyle = "#4b5563";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width - 280, canvas.height - 100);
+      ctx.lineTo(canvas.width - 80, canvas.height - 100);
+      ctx.stroke();
+
+      ctx.font = "16px Arial";
+      ctx.fillStyle = "#4b5563";
+      ctx.fillText(formData.designation, canvas.width - 80, canvas.height - 75);
 
       // Create download link
       const link = document.createElement("a");
@@ -158,7 +284,7 @@ function MainComponent() {
       setShowSuccessPopup(true);
       setTimeout(() => setShowSuccessPopup(false), 3000);
     } catch (error) {
-      console.error("Detailed error generating certificate:", error);
+      console.error("Error generating certificate:", error);
       setShowErrorPopup(true);
       setTimeout(() => setShowErrorPopup(false), 5000);
     } finally {
@@ -167,243 +293,188 @@ function MainComponent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-green-800 relative overflow-hidden">
-      {/* Decorative Background Elements */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-20 left-20 w-32 h-32 border-2 border-yellow-400 rounded-full"></div>
-        <div className="absolute top-40 right-32 w-24 h-24 border border-blue-300 rounded-full"></div>
-        <div className="absolute bottom-32 left-1/4 w-16 h-16 border border-green-300 rounded-full"></div>
-        <div className="absolute bottom-20 right-20 w-20 h-20 border-2 border-yellow-300 rounded-full"></div>
-      </div>
-
-      <div className="relative z-10 p-4 md:p-8">
-        <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
           {/* Header */}
-          <div className="text-center mb-12">
-            <div className="flex justify-center items-center mb-6">
+          <div className="text-center mb-8">
+            <div className="flex justify-center items-center mb-4">
               <img
-              
-                src="/image/logo.png"
-                alt="Himadri Foundation Logo"
-                className="h-24 w-24 object-contain mr-4"
-              />
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 font-serif">
-                  Certificate Generator
-                </h1>
-              </div>
+              src="/images/thf_logo.png"
+              alt="Himadri Foundation Logo"
+              className="h-12 w-12 object-contain mr-3"
+            />
+
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-serif">
+                Certificate Generator
+              </h1>
             </div>
-            <div className="w-32 h-1 bg-gradient-to-r from-yellow-400 to-yellow-600 mx-auto rounded-full"></div>
+            <div className="w-16 h-0.5 bg-blue-600 mx-auto"></div>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 md:p-12 mb-8 border border-white/20">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-blue-900 mb-2">
-                Certificate Information
-              </h2>
-              <p className="text-gray-600">
-                Fill in all the details to generate your certificate
-              </p>
-            </div>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+              Certificate Information
+            </h2>
 
-            <div className="space-y-8">
-              {/* Basic Information Section */}
-              <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl p-6 border-2 border-blue-200">
-                <h3 className="text-xl font-bold text-blue-900 mb-6">
-                  <i className="fas fa-info-circle mr-2 text-blue-600"></i>
-                  Basic Information
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-award mr-2 text-yellow-600"></i>
-                      Certificate Type *
-                    </label>
-                    <select
-                      value={formData.certificateType}
-                      onChange={(e) =>
-                        handleInputChange("certificateType", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-blue-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 focus:border-blue-500 text-lg transition-all duration-300 bg-white"
-                    >
-                      <option value="Certificate of Appreciation">
-                        Certificate of Appreciation
-                      </option>
-                      <option value="Certificate of Recognition">
-                        Certificate of Recognition
-                      </option>
-                      <option value="Himadri Honour Certificate">
-                        Himadri Honour Certificate
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-user mr-2 text-green-600"></i>
-                      Full Name of Recipient *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.fullName}
-                      onChange={(e) =>
-                        handleInputChange("fullName", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-blue-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-300 focus:border-blue-500 text-lg transition-all duration-300 bg-white"
-                      placeholder="Enter recipient's full name"
-                    />
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Certificate Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Certificate Type *
+                </label>
+                <select
+                  value={formData.certificateType}
+                  onChange={(e) =>
+                    handleInputChange("certificateType", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                >
+                  <option value="Certificate of Appreciation">
+                    Certificate of Appreciation
+                  </option>
+                  <option value="Certificate of Recognition">
+                    Certificate of Recognition
+                  </option>
+                  <option value="Himadri Honour Certificate">
+                    Himadri Honour Certificate
+                  </option>
+                </select>
               </div>
 
-              {/* Contribution Details Section */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-xl p-6 border-2 border-green-200">
-                <h3 className="text-xl font-bold text-blue-900 mb-6">
-                  <i className="fas fa-hands-helping mr-2 text-green-600"></i>
-                  Contribution Details
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-heart mr-2 text-red-500"></i>
-                      Type of Contribution *
-                    </label>
-                    <select
-                      value={formData.contributionType}
-                      onChange={(e) =>
-                        handleInputChange("contributionType", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-green-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-green-300 focus:border-green-500 text-lg transition-all duration-300 bg-white"
-                    >
-                      {Object.entries(contributionTypes).map(([key, value]) => (
-                        <option key={key} value={key}>
-                          {value.charAt(0).toUpperCase() + value.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-calendar-alt mr-2 text-purple-600"></i>
-                      Event/Activity Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.eventName}
-                      onChange={(e) =>
-                        handleInputChange("eventName", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-green-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-green-300 focus:border-green-500 text-lg transition-all duration-300 bg-white"
-                      placeholder="Enter event or activity name (optional)"
-                    />
-                  </div>
-                </div>
+              {/* Full Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) =>
+                    handleInputChange("fullName", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                  placeholder="Enter recipient's full name"
+                />
               </div>
 
-              {/* Presenter Information Section */}
-              <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border-2 border-yellow-200">
-                <h3 className="text-xl font-bold text-blue-900 mb-6">
-                  <i className="fas fa-signature mr-2 text-yellow-600"></i>
-                  Presenter Information
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-user-tie mr-2 text-blue-600"></i>
-                      Presented By *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.presentedBy}
-                      onChange={(e) =>
-                        handleInputChange("presentedBy", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-yellow-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-yellow-300 focus:border-yellow-500 text-lg transition-all duration-300 bg-white"
-                      placeholder="Enter presenter's name"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-briefcase mr-2 text-indigo-600"></i>
-                      Designation
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.designation}
-                      onChange={(e) =>
-                        handleInputChange("designation", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-yellow-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-yellow-300 focus:border-yellow-500 text-lg transition-all duration-300 bg-white"
-                      placeholder="e.g., Founder, Director"
-                    />
-                  </div>
-                </div>
+              {/* Contribution Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contribution Type *
+                </label>
+                <select
+                  value={formData.contributionType}
+                  onChange={(e) =>
+                    handleInputChange("contributionType", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                >
+                  {Object.entries(contributionTypes).map(([key, value]) => (
+                    <option key={key} value={key}>
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Certificate Details Section */}
-              <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
-                <h3 className="text-xl font-bold text-blue-900 mb-6">
-                  <i className="fas fa-certificate mr-2 text-purple-600"></i>
-                  Certificate Details
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-calendar mr-2 text-red-600"></i>
-                      Date *
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) =>
-                        handleInputChange("date", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-purple-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-300 focus:border-purple-500 text-lg transition-all duration-300 bg-white"
-                    />
-                  </div>
+              {/* Event Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Event/Activity Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.eventName}
+                  onChange={(e) =>
+                    handleInputChange("eventName", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                  placeholder="Enter event name (optional)"
+                />
+              </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-lg font-semibold text-blue-900 mb-3">
-                      <i className="fas fa-id-card mr-2 text-orange-600"></i>
-                      Certificate ID
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.certificateId}
-                      onChange={(e) =>
-                        handleInputChange("certificateId", e.target.value)
-                      }
-                      className="w-full px-4 py-4 border-2 border-purple-200 rounded-xl focus:outline-none focus:ring-4 focus:ring-purple-300 focus:border-purple-500 text-lg transition-all duration-300 bg-white"
-                      placeholder="Auto-generated ID"
-                    />
-                  </div>
-                </div>
+              {/* Presented By */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Presented By *
+                </label>
+                <input
+                  type="text"
+                  value={formData.presentedBy}
+                  onChange={(e) =>
+                    handleInputChange("presentedBy", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                  placeholder="Enter presenter's name"
+                />
+              </div>
+
+              {/* Designation */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Designation
+                </label>
+                <input
+                  type="text"
+                  value={formData.designation}
+                  onChange={(e) =>
+                    handleInputChange("designation", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                  placeholder="e.g., Founder, Director"
+                />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => handleInputChange("date", e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                />
+              </div>
+
+              {/* Certificate ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Certificate ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.certificateId}
+                  onChange={(e) =>
+                    handleInputChange("certificateId", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white text-gray-900"
+                  placeholder="Auto-generated ID"
+                />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-center items-center mt-12 space-x-6">
+            <div className="flex justify-center items-center mt-6 space-x-4">
               <button
                 onClick={resetForm}
-                className="px-8 py-4 rounded-xl font-semibold text-lg bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                className="px-6 py-2 rounded-md font-medium text-sm bg-gray-600 text-white hover:bg-gray-700 transition-colors duration-200"
               >
-                <i className="fas fa-redo mr-2"></i>
                 Reset Form
               </button>
 
               <button
                 onClick={() => setShowPreview(!showPreview)}
                 disabled={!formData.fullName || !formData.presentedBy}
-                className={`px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 ${
+                className={`px-6 py-2 rounded-md font-medium text-sm transition-colors duration-200 ${
                   formData.fullName && formData.presentedBy
-                    ? "bg-gradient-to-r from-yellow-500 to-yellow-600 text-blue-900 hover:from-yellow-600 hover:to-yellow-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
                     : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                <i className="fas fa-eye mr-2"></i>
                 {showPreview ? "Hide Preview" : "Generate Preview"}
               </button>
             </div>
@@ -412,56 +483,53 @@ function MainComponent() {
           {/* Certificate Preview Section */}
           {showPreview && (
             <>
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center bg-white/90 backdrop-blur-sm rounded-full px-8 py-4 shadow-lg">
-                  <i className="fas fa-certificate text-3xl text-yellow-600 mr-4"></i>
-                  <h2 className="text-2xl font-bold text-blue-900">
-                    Certificate Preview
-                  </h2>
-                </div>
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Certificate Preview
+                </h2>
               </div>
 
               {formData.fullName && formData.presentedBy ? (
-                <div className="flex justify-center mb-8">
-                  <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
+                <div className="flex justify-center mb-6">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 w-full max-w-4xl overflow-x-auto">
                     <div
                       id="certificate"
-                      className="relative overflow-hidden shadow-2xl rounded-lg"
+                      className="relative mx-auto"
                       style={{
-                        width: "870px",
+                        width: "auto",
                         height: "624px",
-                        aspectRatio: "8.5/6.5",
-                        backgroundImage:
-                          "url('/image/certificate.png')",
+                        minWidth: "816px",
+                        backgroundImage:"url('/images/certificate.png')", // <-- local image path
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
-                        padding: "52px",
+                        padding: "48px",
+                        boxSizing: "border-box",
                       }}
                     >
-
-                      
                       <div className="relative z-10 h-full flex flex-col justify-between">
-                        <div className="absolute top-0 right-0 text-xs text-gray-700 font-medium">
+                        <div className="absolute top-0 right-0 text-xs text-gray-700 font-medium pr-0">
                           Certificate ID: {formData.certificateId}
                         </div>
 
                         <div className="text-center">
                           <div className="flex justify-center items-center mb-2">
                             <img
-                              src="/image/logo.png"
+                              src="https://ucarecdn.com/3401fbc5-c6dc-47ae-b7c9-d1b3cdb1d073/-/format/auto/"
                               alt="Himadri Foundation Logo"
                               className="h-16 w-16 object-contain"
-                              crossOrigin="anonymous"
+                              style={{
+                                display: "block",
+                                visibility: "visible",
+                              }}
                             />
                           </div>
-                          <h1 className="text-l font-bold text-gray-800 mb-1">
+                          <h1 className="text-2xl font-bold text-gray-800 mb-1">
                             The Himadri Foundation
                           </h1>
-                          <h2 className="text-xs"> From The Himalayas, For The Himalayas</h2>
 
                           <h2
-                            className="text-3xl font-bold text-blue-800 mb-2 font-baskerville"
+                            className="text-3xl font-bold text-blue-800 mb-2"
                             style={{ marginTop: "24px" }}
                           >
                             {formData.certificateType}
@@ -470,12 +538,12 @@ function MainComponent() {
                         </div>
 
                         <div className="text-center flex-1 flex flex-col justify-center">
-                          <p className="text-base text-gray-700 mb-2">
+                          <p className="text-base text-gray-700 mb-4">
                             This certificate is proudly presented to
                           </p>
 
-                          <div className="mb-2">
-                            <h3 className="text-2xl font-bold text-blue-800 inline-block font-montecarlo">
+                          <div className="mb-6">
+                            <h3 className="text-3xl font-bold text-blue-800 pb-2 inline-block">
                               {formData.fullName}
                             </h3>
                           </div>
@@ -524,24 +592,6 @@ function MainComponent() {
                             </p>
                           </div>
 
-
-                          //QR CODE
-                          {/* <div className="text-center">
-                            {qrCode && (
-                              <div>
-                                <img
-                                  src={qrCode}
-                                  alt="QR Code"
-                                  className="w-12 h-12 mx-auto mb-1"
-                                  crossOrigin="anonymous"
-                                />
-                                <p className="text-xs text-gray-600">
-                                  Follow us
-                                </p>
-                              </div>
-                            )}
-                          </div> */}
-
                           <div className="text-right">
                             <div className="pt-2 min-w-[140px]">
                               <p className="font-semibold text-gray-800 text-base">
@@ -559,20 +609,20 @@ function MainComponent() {
                     </div>
 
                     {/* Download Button */}
-                    <div className="text-center mt-8">
+                    <div className="text-center mt-6">
                       <button
                         onClick={downloadCertificate}
                         disabled={isGenerating}
-                        className="bg-gradient-to-r from-green-600 to-green-700 text-white px-12 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="bg-blue-600 text-white px-8 py-3 rounded-md font-medium text-sm hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isGenerating ? (
                           <>
-                            <i className="fas fa-spinner fa-spin mr-3"></i>
+                            <i className="fas fa-spinner fa-spin mr-2"></i>
                             Generating...
                           </>
                         ) : (
                           <>
-                            <i className="fas fa-download mr-3"></i>
+                            <i className="fas fa-download mr-2"></i>
                             Download Certificate
                           </>
                         )}
@@ -581,8 +631,8 @@ function MainComponent() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-16 text-white">
-                  <i className="fas fa-certificate text-6xl mb-4 opacity-50"></i>
+                <div className="text-center py-16 text-gray-500">
+                  <i className="fas fa-certificate text-6xl mb-4 opacity-30"></i>
                   <p className="text-xl">
                     Fill in the required fields to generate certificate preview
                   </p>
@@ -591,11 +641,55 @@ function MainComponent() {
             </>
           )}
 
-          
+          {/* How to Use Guide */}
+          {/* <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">
+              <i className="fas fa-question-circle mr-2 text-blue-600"></i>
+              How to Use This Generator
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="text-center">
+                <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="fas fa-edit text-white text-lg"></i>
+                </div>
+                <h4 className="font-semibold text-lg text-gray-900 mb-2">
+                  1. Fill Details
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  Complete all the form fields with recipient information and
+                  contribution details
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="bg-gray-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="fas fa-eye text-white text-lg"></i>
+                </div>
+                <h4 className="font-semibold text-lg text-gray-900 mb-2">
+                  2. Preview
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  Review your certificate design and make any necessary
+                  adjustments
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="bg-black w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <i className="fas fa-download text-white text-lg"></i>
+                </div>
+                <h4 className="font-semibold text-lg text-gray-900 mb-2">
+                  3. Download
+                </h4>
+                <p className="text-gray-600 text-sm">
+                  Download your certificate as a high-quality PNG image
+                </p>
+              </div>
+            </div>
+          </div> */}
+
           {/* Footer */}
-          <div className="text-center mt-12 text-white/80">
-            <p className="text-lg">Designed with ❤️ by Harmeet Singh</p>
-            <p className="text-sm mt-2">
+          <div className="text-center mt-8 text-gray-500">
+            <p className="text-sm">Designed with ❤️ by Harmeet Singh</p>
+            <p className="text-xs mt-1">
               © 2025 The Himadri Foundation. All rights reserved.
             </p>
           </div>
@@ -604,16 +698,18 @@ function MainComponent() {
 
       {/* Success Popup */}
       {showSuccessPopup && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-4 border-green-500">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 text-center shadow-lg border border-gray-200">
             
-            <h3 className="text-3xl font-bold text-green-700 mb-4">Success!</h3>
-            <p className="text-gray-600 mb-6 text-lg">
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              Success!
+            </h3>
+            <p className="text-gray-600 mb-4 text-sm">
               Your certificate has been downloaded successfully.
             </p>
             <button
               onClick={() => setShowSuccessPopup(false)}
-              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-3 rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-300 font-semibold"
+              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200 font-medium text-sm"
             >
               Close
             </button>
@@ -623,15 +719,16 @@ function MainComponent() {
 
       {/* Error Popup */}
       {showErrorPopup && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl border-4 border-red-500">
-                        <h3 className="text-3xl font-bold text-red-700 mb-4">Error!</h3>
-            <p className="text-gray-600 mb-6 text-lg">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4 text-center shadow-lg border border-gray-200">
+           
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">Error!</h3>
+            <p className="text-gray-600 mb-4 text-sm">
               There was an error generating your certificate. Please try again.
             </p>
             <button
               onClick={() => setShowErrorPopup(false)}
-              className="bg-gradient-to-r from-red-600 to-red-700 text-white px-8 py-3 rounded-xl hover:from-red-700 hover:to-red-800 transition-all duration-300 font-semibold"
+              className="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 transition-colors duration-200 font-medium text-sm"
             >
               Close
             </button>
@@ -640,7 +737,6 @@ function MainComponent() {
       )}
 
       <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     </div>
   );
 }
