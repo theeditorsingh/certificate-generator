@@ -156,7 +156,7 @@ function MainComponent() {
       ctx.fillRect((canvas.width - 120) / 2, 335, 120, 3);
 
       // "This certificate is proudly presented to"
-      ctx.font = "bold 20px Arial";
+      ctx.font = "20px Arial";
       ctx.fillStyle = "#374151";
       ctx.fillText(
         "This certificate is proudly presented to",
@@ -170,7 +170,7 @@ function MainComponent() {
       ctx.fillText(formData.fullName, canvas.width / 2, 460);
 
       // Recognition text
-      ctx.font = "bold 20px Arial";
+      ctx.font = "20px Arial";
       ctx.fillStyle = "#374151";
       ctx.textAlign = "center";
 
